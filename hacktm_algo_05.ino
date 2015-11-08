@@ -38,14 +38,15 @@ const int LDR3=3;              //analog pin to which LDR3 is connected, here we 
 const int UNCONNECTED_PIN=5;   //analog pin used for the randomizing function
 
 const int delay_viraj = 220;//constanta pe care o folosesc sa si delay la viraje
+const int SMALL_TIME = 150;
 
 const int START_S=0;           //sensor start value
 const int COMMANDS_SIZE=128;   //the number of command we keep history of
-const int TIME_STEP=10;        //the size of a time step in millis
+const int TIME_STEP=200;        //the size of a time step in millis
 
-const int THRESHOLD_LOW_0=600;     //low threshold of sensor value
+const int THRESHOLD_LOW_0=750;     //low threshold of sensor value
 const int THRESHOLD_HIGH_0=850;    //high threshold of sensorvalue
-const int THRESHOLD_LOW_1=600;     //low threshold of sensor value
+const int THRESHOLD_LOW_1=750;     //low threshold of sensor value
 const int THRESHOLD_HIGH_1=850;    //high threshold of sensorvalue
 const int THRESHOLD_LOW_4=20;     //low threshold of sensor value
 const int THRESHOLD_HIGH_4=40;    //high threshold of sensorvalue
@@ -219,11 +220,7 @@ void setup(){
 //===================================================================================================================================================================================  
 }
 
-void loop(){
-  /*
-  Serial.println("Cnt1: " + String(cnt1 - oldcnt1));
-  Serial.println("Cnt2: " + String(cnt2 - oldcnt2));
-  */
+void readSensorData() {
   
   start_RIGHT_SENSOR();
   start_LEFT_SENSOR();
@@ -241,20 +238,40 @@ void loop(){
   setFlagBySVal(3,f3,s3);
   setFlagBySVal(4,f4,s4);
   setFlagBySVal(5,f5,s5);
-
-  //_delay_ms(600);
-  printSensorValuesAndFlags();
-
+  
+  
   if (s4 == -1) {
     f4 = false;  
   }
 
   f_front = f0 | f3;
-  f_right = f1 | f4;
-  f_left = f2;
+  f_right = f2;// | f4;
+  f_left = f1;
+  
+  Serial.println("f_front = " + String(f_front) + ", f_left = " + String(f_left) + ", s1 = " + String(s1));
+}
+
+void loop(){
+  /*
+  Serial.println("Cnt1: " + String(cnt1 - oldcnt1));
+  Serial.println("Cnt2: " + String(cnt2 - oldcnt2));
+  */
+  
+  //_delay_ms(600);
+  //printSensorValuesAndFlags();
+
+  readSensorData();
   
   command=0;
   
+  //simplaeAlgo();  
+  wallFollow();
+  
+  //_delay_ms(1000);
+    
+}
+
+void simpleAlgo() {
   //no frontal obstacle and no back move was just made
   //in this case go front
   if(f_front == false){
@@ -290,20 +307,8 @@ void loop(){
     case 1: goRIGHT(); break;
     case 2: goLEFT(); break;
     //case 3: goRIGHT(); backtrack = false; break;
-  }
-
-
-  
-  lasts0 = s0;
-  lasts1 = s1;
-  lasts2 = s2;
-  lasts3 = s3;
-  
-  //_delay_ms(1000);
-    
+  }  
 }
-
-
 
 void goFRONT()
 {
@@ -420,13 +425,13 @@ void start_RIGHT_SENSOR()
     t1 = cnt1;
     hz1 = (t1 - oldcnt1) / (millis() - last1);
     last1 = millis();
-    
+/*    
     Serial.print("FREQ RIGHT: "); 
     Serial.print(hz1);
     Serial.print("\t = "); 
     Serial.print((hz1+50)/100);  // +50 == rounding last digit
     Serial.println(" mW/m2");
-    
+*/    
     oldcnt1 = t1;
     
   //}
@@ -443,18 +448,175 @@ void start_LEFT_SENSOR()
     t2 = cnt2;
     hz2 = (t2 - oldcnt2) / (millis() - last2);
     last2 = millis();
-    
+
+/*    
     Serial.print("FREQ LEFT: "); 
     Serial.print(hz2);
     Serial.print("\t = "); 
     Serial.print((hz2+50)/100);  // +50 == rounding last digit
     Serial.println(" mW/m2");
-    
+*/    
     oldcnt2 = t2;
   //}
   
 }
 //=============================================================================================================
+
+
+
+
+
+
+//===================    WALL FOLLOW METHODS   ============================================
+
+
+
+void wallFollow() {
+  wallFollowLeft();
+  //wallFollowRight();
+}
+
+void wallFollowLeft() {
+  // the left hand wall must not be lost
+  
+  if (f_left == false) {
+    if (f_front == false) {
+      while (f_left == false) {
+        goBackWallFollow();
+        readSensorData();
+      }
+      //goLeftWallFollow();
+      goRightWallFollow();  
+    } else if (f_front == true) {
+      //goRightWallFollow();  
+      goLeftWallFollow();
+      while (f_left == false) {
+        goBackWallFollow();
+        readSensorData();
+      }
+    }
+  } else if (f_left == true) {
+    if (f_front == false) {
+      goFrontWallFollow();
+    } else if (f_front == true) {
+      //goRightWallFollow();
+      goLeftWallFollow();
+    } 
+  }
+  
+  OCR0A = 0;
+  OCR0B = 0;
+}
+
+
+void wallFollowRight() {
+  // the left hand wall must not be lost
+  
+  if (f_right == false) {
+    if (f_front == false) {
+      while (f_left == false) {
+        goBackWallFollow();
+        readSensorData();
+      }
+      goLeftWallFollow();
+      //goRightWallFollow();  
+    } else if (f_front == true) {
+      goRightWallFollow();  
+      //goLeftWallFollow();
+      while (f_right == false) {
+        goBackWallFollow();
+        readSensorData();
+      }
+    }
+  } else if (f_right == true) {
+    if (f_front == false) {
+      goFrontWallFollow();
+    } else if (f_front == true) {
+      goRightWallFollow();
+      //goLeftWallFollow();
+    } 
+  }
+  
+  OCR0A = 0;
+  OCR0B = 0;
+}
+
+void goFrontWallFollow()
+{
+  //merge inainte
+  Serial.println("Front");
+  
+  OCR0A = 110;//OCR0A este PWM-ul pentru rotile din partea dreapta
+  OCR0B = 110;
+   
+  sbi(PORTB,PORTB0);//Rotile din stanga
+  cbi(PORTB,PORTB1);//Rotile din stanga
+   
+  sbi(PORTD,PORTD7); //STDBY va fi tot timpul 1
+  
+  sbi(PORTB,PORTB2);//SET PWMA ON    pt rotile din dreapta
+  cbi(PORTB,PORTB3);//SET PWMA ON    pt rotile din dreapta
+   
+  _delay_ms(SMALL_TIME);
+}
+
+void goBackWallFollow()
+{
+   //merge in spate
+   Serial.println("Back");
+   
+   OCR0A = 110;//OCR0A este PWM-ul pentru rotile din partea dreapta
+   OCR0B = 110;
+   
+   cbi(PORTB,PORTB0);//Rotile din stanga
+   sbi(PORTB,PORTB1);//Rotile din stanga
+                
+   sbi(PORTD,PORTD7); //STDBY va fi tot timpul 1
+   
+   cbi(PORTB,PORTB2);//SET PWMA ON    pt rotile din dreapta
+   sbi(PORTB,PORTB3);//SET PWMA ON    pt rotile din dreapta     
+   
+   _delay_ms(SMALL_TIME);
+}
+
+void goLeftWallFollow()
+{
+   //VIREAZA STANGA
+   Serial.println("Left");
+   
+   OCR0A = 180;
+   OCR0B = 180;
+   sbi(PORTB,PORTB0);//Rotile din stanga
+   cbi(PORTB,PORTB1);//Rotile din stanga
+                
+   sbi(PORTD,PORTD7); //STDBY va fi tot timpul 1
+   //sbi(PORTB,PORTB5);
+   
+   cbi(PORTB,PORTB2);//SET PWMA ON    pt rotile din dreapta
+   sbi(PORTB,PORTB3);//SET PWMA ON    pt rotile din dreapta
+   
+   _delay_ms(SMALL_TIME);
+}
+
+void goRightWallFollow()
+{
+   //VIREAZA DREAPTA
+   Serial.println("Right");
+   
+   OCR0A = 180;
+   OCR0B = 180;
+   
+   cbi(PORTB,PORTB0);//Rotile din stanga
+   sbi(PORTB,PORTB1);//Rotile din stanga
+                
+   sbi(PORTD,PORTD7); //STDBY va fi tot timpul 1
+   
+   sbi(PORTB,PORTB2);//SET PWMA ON    pt rotile din dreapta
+   cbi(PORTB,PORTB3);//SET PWMA ON    pt rotile din dreapta
+   
+   _delay_ms(SMALL_TIME);
+}
+
 
 
 
